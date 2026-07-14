@@ -34,17 +34,20 @@ export default function Navbar() {
             }}
         >
             <div
+                className="navbar-container"
                 style={{
                     maxWidth: '1180px',
                     margin: '0 auto',
                     padding: '0.9rem 1.25rem',
-                    display: 'flex',
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto 1fr',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
+                    gap: '1rem',
                 }}
             >
                 <Link
                     to="/"
+                    className="navbar-logo"
                     style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -96,7 +99,15 @@ export default function Navbar() {
                     </div>
                 </Link>
 
-                <div className="navbar-desktop-items" style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+                <div
+                    className="navbar-desktop-items"
+                    style={{
+                        display: 'flex',
+                        gap: '0.45rem',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                    }}
+                >
                     {navItems.map((item) => {
                         const active = isActive(item.path);
                         return (
@@ -111,6 +122,7 @@ export default function Navbar() {
                                     padding: '0.6rem 0.9rem',
                                     borderRadius: '999px',
                                     background: active ? '#eff6ff' : 'transparent',
+                                    whiteSpace: 'nowrap',
                                     transition: 'all 0.2s ease',
                                 }}
                             >
@@ -131,6 +143,7 @@ export default function Navbar() {
                         cursor: 'pointer',
                         padding: '0.55rem',
                         boxShadow: '0 4px 12px rgba(15, 23, 42, 0.06)',
+                        justifySelf: 'end',
                     }}
                     aria-label="Toggle menu"
                 >
@@ -187,6 +200,15 @@ export default function Navbar() {
                     }
                     .navbar-hamburger {
                         display: block !important;
+                    }
+                    .navbar-container {
+                        display: flex !important;
+                        justify-content: space-between !important;
+                    }
+                }
+                @media (min-width: 769px) {
+                    .navbar-logo {
+                        margin-left: -1.5rem;
                     }
                 }
             `}</style>
