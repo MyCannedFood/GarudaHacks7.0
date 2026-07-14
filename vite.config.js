@@ -16,10 +16,17 @@ export default defineConfig({
         }),
         tailwindcss(),
     ],
+    esbuild: {
+        jsx: 'automatic',
+        jsxImportSource: 'react',
+    },
     server: {
-        host: '0.0.0.0',
+        host: 'localhost',
         port: 5173,
         strictPort: true,
+        hmr: {
+            host: 'localhost',
+        },
         watch: {
             ignored: ['**/storage/framework/views/**'],
         },
