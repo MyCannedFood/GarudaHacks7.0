@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { supabase } from '../utils/supabase';
 
 const navItems = [
     { name: 'Beranda', path: '/' },
@@ -11,7 +12,11 @@ const navItems = [
 
 export default function Navbar() {
     const location = useLocation();
+    const navigate = useNavigate();
     const [isOpen, setIsOpen] = useState(false);
+    const [user, setUser] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
+    const [authError, setAuthError] = useState('');
 
     const isActive = (path) => {
         if (path === '/') {
@@ -19,6 +24,81 @@ export default function Navbar() {
         }
 
         return location.pathname.startsWith(path);
+    };
+
+    useEffect(() => {
+        let mounted = true;
+        let cleanup = () => {};
+
+        const syncAuth = async () => {
+            if (!supabase) {
+                if (mounted) {
+                    setAuthLoading(false);
+                }
+                return;
+            }
+
+            const {
+                data: { session },
+            } = await supabase.auth.getSession();
+
+            if (!mounted) return;
+
+            setUser(session?.user ?? null);
+            setAuthLoading(false);
+
+            const { data: authData } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+                if (!mounted) return;
+                setUser(nextSession?.user ?? null);
+
+                if (_event === 'SIGNED_IN') {
+                    navigate('/', { replace: true });
+                }
+            });
+
+            cleanup = () => authData.subscription.unsubscribe();
+        };
+
+        syncAuth();
+
+        return () => {
+            mounted = false;
+            cleanup();
+        };
+    }, [navigate]);
+
+    const handleAuthClick = async () => {
+        if (authLoading) return;
+
+        if (!supabase) {
+            setAuthError('Supabase belum dikonfigurasi dengan benar. Periksa URL dan anon key Anda.');
+            return;
+        }
+
+        if (user) {
+            setAuthError('');
+            await supabase.auth.signOut();
+            setUser(null);
+            navigate('/', { replace: true });
+            return;
+        }
+
+        setAuthError('');
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: `${window.location.origin}/`,
+            },
+        });
+
+        if (error) {
+            const friendlyMessage = error?.message?.includes('provider is not enabled')
+                ? 'Google belum diaktifkan sebagai provider auth di Supabase Dashboard. Buka Authentication > Providers > Google lalu aktifkan.'
+                : error?.message || 'Login gagal. Coba lagi.';
+
+            setAuthError(friendlyMessage);
+            console.error('Supabase auth error:', error);
+        }
     };
 
     return (
@@ -145,29 +225,18 @@ export default function Navbar() {
                         className="navbar-auth-buttons"
                         style={{
                             display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.6rem',
+                            flexDirection: 'column',
+                            alignItems: 'flex-end',
+                            gap: '0.35rem',
                         }}
                     >
-                        <Link
-                            to="/masuk"
+                        <button
+                            type="button"
+                            onClick={handleAuthClick}
+                            disabled={authLoading}
                             style={{
-                                textDecoration: 'none',
-                                color: '#334155',
-                                fontWeight: 600,
-                                fontSize: '0.9rem',
-                                padding: '0.6rem 1rem',
-                                borderRadius: '999px',
-                                whiteSpace: 'nowrap',
-                                transition: 'all 0.2s ease',
-                            }}
-                        >
-                            Masuk
-                        </Link>
-                        <Link
-                            to="/daftar"
-                            style={{
-                                textDecoration: 'none',
+                                border: 'none',
+                                cursor: authLoading ? 'wait' : 'pointer',
                                 color: '#ffffff',
                                 fontWeight: 700,
                                 fontSize: '0.9rem',
@@ -179,8 +248,21 @@ export default function Navbar() {
                                 transition: 'all 0.2s ease',
                             }}
                         >
-                            Daftar
-                        </Link>
+                            {authLoading ? 'Memuat...' : user ? 'Logout' : 'Masuk'}
+                        </button>
+                        {authError ? (
+                            <span
+                                style={{
+                                    maxWidth: '240px',
+                                    fontSize: '0.7rem',
+                                    lineHeight: 1.4,
+                                    color: '#dc2626',
+                                    textAlign: 'right',
+                                }}
+                            >
+                                {authError}
+                            </span>
+                        ) : null}
                     </div>
 
                     <button
@@ -245,45 +327,44 @@ export default function Navbar() {
                     <div
                         style={{
                             display: 'flex',
+                            flexDirection: 'column',
                             gap: '0.5rem',
                             marginTop: '0.4rem',
                             paddingTop: '0.6rem',
                             borderTop: '1px solid rgba(15, 23, 42, 0.08)',
                         }}
                     >
-                        <Link
-                            to="/masuk"
-                            onClick={() => setIsOpen(false)}
-                            style={{
-                                flex: 1,
-                                textAlign: 'center',
-                                textDecoration: 'none',
-                                color: '#334155',
-                                fontWeight: 700,
-                                padding: '0.7rem 0.85rem',
-                                borderRadius: '12px',
-                                background: '#f8fafc',
-                                border: '1px solid #e2e8f0',
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setIsOpen(false);
+                                handleAuthClick();
                             }}
-                        >
-                            Masuk
-                        </Link>
-                        <Link
-                            to="/daftar"
-                            onClick={() => setIsOpen(false)}
                             style={{
                                 flex: 1,
                                 textAlign: 'center',
-                                textDecoration: 'none',
+                                border: 'none',
                                 color: '#ffffff',
                                 fontWeight: 700,
                                 padding: '0.7rem 0.85rem',
                                 borderRadius: '12px',
                                 background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
+                                cursor: authLoading ? 'wait' : 'pointer',
                             }}
                         >
-                            Daftar
-                        </Link>
+                            {authLoading ? 'Memuat...' : user ? 'Logout' : 'Masuk'}
+                        </button>
+                        {authError ? (
+                            <span
+                                style={{
+                                    fontSize: '0.78rem',
+                                    lineHeight: 1.4,
+                                    color: '#dc2626',
+                                }}
+                            >
+                                {authError}
+                            </span>
+                        ) : null}
                     </div>
                 </div>
             )}
@@ -309,10 +390,7 @@ export default function Navbar() {
                         margin-left: -1.5rem;
                     }
                 }
-                .navbar-auth-buttons a:first-child:hover {
-                    background: #f1f5f9;
-                }
-                .navbar-auth-buttons a:last-child:hover {
+                .navbar-auth-buttons button:hover {
                     box-shadow: 0 14px 28px rgba(37, 99, 235, 0.32);
                     transform: translateY(-1px);
                 }
