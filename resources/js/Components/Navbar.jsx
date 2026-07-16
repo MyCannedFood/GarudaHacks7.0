@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { supabase } from '../utils/supabase';
 import { useDarkMode } from '../utils/DarkModeProvider';
 
 const navItems = [
@@ -12,14 +13,75 @@ const navItems = [
 
 export default function Navbar() {
     const location = useLocation();
+    const navigate = useNavigate();
     const [isOpen, setIsOpen] = useState(false);
     const { isDark, toggle } = useDarkMode();
+    const [user, setUser] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
+    const [authError, setAuthError] = useState('');
 
-    const isActive = (path) => {
-        if (path === '/') {
-            return location.pathname === path;
+    useEffect(() => {
+        let mounted = true;
+        let cleanup = () => {};
+
+        const syncAuth = async () => {
+            if (!supabase) {
+                if (mounted) setAuthLoading(false);
+                return;
+            }
+
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!mounted) return;
+
+            setUser(session?.user ?? null);
+            setAuthLoading(false);
+
+            const { data: authData } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+                if (!mounted) return;
+                setUser(nextSession?.user ?? null);
+                if (_event === 'SIGNED_IN') navigate('/', { replace: true });
+            });
+
+            cleanup = () => authData.subscription.unsubscribe();
+        };
+
+        syncAuth();
+        return () => { mounted = false; cleanup(); };
+    }, [navigate]);
+
+    const handleAuthClick = async () => {
+        if (authLoading) return;
+
+        if (!supabase) {
+            setAuthError('Supabase belum dikonfigurasi dengan benar. Periksa URL dan anon key Anda.');
+            return;
         }
 
+        if (user) {
+            setAuthError('');
+            await supabase.auth.signOut();
+            setUser(null);
+            navigate('/', { replace: true });
+            return;
+        }
+
+        setAuthError('');
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: `${window.location.origin}/` },
+        });
+
+        if (error) {
+            const friendlyMessage = error?.message?.includes('provider is not enabled')
+                ? 'Google belum diaktifkan sebagai provider auth di Supabase Dashboard.'
+                : error?.message || 'Login gagal. Coba lagi.';
+            setAuthError(friendlyMessage);
+            console.error('Supabase auth error:', error);
+        }
+    };
+
+    const isActive = (path) => {
+        if (path === '/') return location.pathname === path;
         return location.pathname.startsWith(path);
     };
 
@@ -180,38 +242,69 @@ export default function Navbar() {
                                 </svg>
                             )}
                         </button>
-                        <Link
-                            to="/masuk"
-                            style={{
-                                textDecoration: 'none',
-                                color: 'var(--color-text)',
-                                fontWeight: 600,
-                                fontSize: '0.9rem',
-                                padding: '0.6rem 1rem',
-                                borderRadius: '999px',
-                                whiteSpace: 'nowrap',
-                                transition: 'all 0.2s ease',
-                            }}
-                        >
-                            Masuk
-                        </Link>
-                        <Link
-                            to="/daftar"
-                            style={{
-                                textDecoration: 'none',
-                                color: '#ffffff',
-                                fontWeight: 700,
-                                fontSize: '0.9rem',
-                                padding: '0.62rem 1.15rem',
-                                borderRadius: '999px',
-                                background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
-                                boxShadow: '0 10px 24px rgba(37, 99, 235, 0.24)',
-                                whiteSpace: 'nowrap',
-                                transition: 'all 0.2s ease',
-                            }}
-                        >
-                            Daftar
-                        </Link>
+                        {user ? (
+                            <button
+                                onClick={handleAuthClick}
+                                disabled={authLoading}
+                                style={{
+                                    textDecoration: 'none',
+                                    color: 'var(--color-text)',
+                                    fontWeight: 600,
+                                    fontSize: '0.9rem',
+                                    padding: '0.6rem 1rem',
+                                    borderRadius: '999px',
+                                    border: '1px solid var(--color-border)',
+                                    background: 'var(--color-bg-card)',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap',
+                                    transition: 'all 0.2s ease',
+                                }}
+                            >
+                                {authLoading ? '...' : 'Keluar'}
+                            </button>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={handleAuthClick}
+                                    disabled={authLoading}
+                                    style={{
+                                        textDecoration: 'none',
+                                        color: 'var(--color-text)',
+                                        fontWeight: 600,
+                                        fontSize: '0.9rem',
+                                        padding: '0.6rem 1rem',
+                                        borderRadius: '999px',
+                                        border: 'none',
+                                        background: 'transparent',
+                                        cursor: 'pointer',
+                                        whiteSpace: 'nowrap',
+                                        transition: 'all 0.2s ease',
+                                    }}
+                                >
+                                    {authLoading ? '...' : 'Masuk'}
+                                </button>
+                                <button
+                                    onClick={handleAuthClick}
+                                    disabled={authLoading}
+                                    style={{
+                                        textDecoration: 'none',
+                                        color: '#ffffff',
+                                        fontWeight: 700,
+                                        fontSize: '0.9rem',
+                                        padding: '0.62rem 1.15rem',
+                                        borderRadius: '999px',
+                                        border: 'none',
+                                        background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
+                                        boxShadow: '0 10px 24px rgba(37, 99, 235, 0.24)',
+                                        whiteSpace: 'nowrap',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease',
+                                    }}
+                                >
+                                    {authLoading ? '...' : 'Daftar'}
+                                </button>
+                            </>
+                        )}
                     </div>
 
                     <button
@@ -238,6 +331,21 @@ export default function Navbar() {
                     </button>
                 </div>
             </div>
+
+            {authError && (
+                <div
+                    style={{
+                        padding: '0.5rem 1.25rem',
+                        fontSize: '0.8rem',
+                        color: '#dc2626',
+                        background: '#fef2f2',
+                        textAlign: 'center',
+                        borderBottom: '1px solid #fecaca',
+                    }}
+                >
+                    {authError}
+                </div>
+            )}
 
             {isOpen && (
                 <div
@@ -290,7 +398,6 @@ export default function Navbar() {
                                 justifyContent: 'center',
                                 gap: '0.5rem',
                                 flex: 1,
-                                textDecoration: 'none',
                                 color: 'var(--color-text)',
                                 fontWeight: 700,
                                 padding: '0.7rem 0.85rem',
@@ -313,39 +420,25 @@ export default function Navbar() {
                             )}
                             {isDark ? 'Mode Terang' : 'Mode Gelap'}
                         </button>
-                        <Link
-                            to="/masuk"
-                            onClick={() => setIsOpen(false)}
+                        <button
+                            onClick={handleAuthClick}
+                            disabled={authLoading}
                             style={{
                                 flex: 1,
                                 textAlign: 'center',
                                 textDecoration: 'none',
-                                color: 'var(--color-text)',
+                                color: user ? 'var(--color-text)' : '#ffffff',
                                 fontWeight: 700,
                                 padding: '0.7rem 0.85rem',
                                 borderRadius: '12px',
-                                background: 'var(--color-bg-card)',
-                                border: '1px solid var(--color-border)',
+                                background: user ? 'var(--color-bg-card)' : 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
+                                border: user ? '1px solid var(--color-border)' : 'none',
+                                cursor: 'pointer',
+                                fontSize: '0.9rem',
                             }}
                         >
-                            Masuk
-                        </Link>
-                        <Link
-                            to="/daftar"
-                            onClick={() => setIsOpen(false)}
-                            style={{
-                                flex: 1,
-                                textAlign: 'center',
-                                textDecoration: 'none',
-                                color: '#ffffff',
-                                fontWeight: 700,
-                                padding: '0.7rem 0.85rem',
-                                borderRadius: '12px',
-                                background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
-                            }}
-                        >
-                            Daftar
-                        </Link>
+                            {authLoading ? '...' : (user ? 'Keluar' : 'Masuk / Daftar')}
+                        </button>
                     </div>
                 </div>
             )}
@@ -371,10 +464,10 @@ export default function Navbar() {
                         margin-left: -1.5rem;
                     }
                 }
-                .navbar-auth-buttons a:first-child:hover {
+                .navbar-auth-buttons button:first-child:hover {
                     background: #f1f5f9;
                 }
-                .navbar-auth-buttons a:last-child:hover {
+                .navbar-auth-buttons button:last-child:hover {
                     box-shadow: 0 14px 28px rgba(37, 99, 235, 0.32);
                     transform: translateY(-1px);
                 }
